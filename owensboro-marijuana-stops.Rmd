@@ -1,0 +1,74 @@
+---
+title: "Owensboro Marijuana Stops"
+author: "Benjamin Hoffner-Brodsky"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+library(gt)
+library(sf)
+library(fs)
+library(scales)
+library(lubridate)
+library(gganimate)
+library(ggthemes)
+library(tidyverse)
+
+# I choose to use data from Owensboro because they A) have the smallest number
+# of stops which makes for quicker processing and B) provide some of the most
+# in-depth details for stop reasons relative to other cities in the Stanford
+# database
+
+owensboro <- read_rds(url("https://stacks.stanford.edu/file/druid:tr137st9964/tr137st9964_ky_owensboro_2019_02_25.rds")) %>% 
+  mutate(date = ymd(date))
+
+download.file("https://stacks.stanford.edu/file/druid:tr137st9964/tr137st9964_ky_owensboro_shapefiles_2019_02_25.tgz",
+              destfile = "owensboro_shapefiles.tgz",
+              quiet = TRUE)
+
+untar("owensboro_shapefiles.tgz")
+
+owensboro_shape <- read_sf("ky_owensboro_shapefiles/Police_zones.shp")
+
+# I delete the files to prevent overlapping file names or accumulating github space 
+
+file_delete(c("owensboro_shapefiles.tgz", "ky_owensboro_shapefiles"))
+
+```
+
+
+```{r animation}
+
+owensboro_arrests <- owensboro %>% 
+  
+# I choose to investigate marijuana-related stops given the current debate over
+# legalization in Kentucky, and visualize gender based on recently published
+# studies over the disparity between male and female usage (citation missing). I
+# was curious to see if the same disparity was present in this data
+  
+  filter(str_detect(reason_for_stop, "MARIJUANA"),
+         !is.na(date),
+         !is.na(subject_sex)) %>% 
+  mutate(month = month(date),
+         subject_sex = str_to_title(subject_sex))
+
+geo_owensboro_arrests <- st_as_sf(owensboro_arrests, coords = c("lng", "lat"), crs = 4326)
+
+ggplot(data = owensboro_shape) +
+  geom_sf() + 
+  geom_sf(data = geo_owensboro_arrests, aes(color = subject_sex)) +
+  transition_time(month) + 
+  labs(
+    title = "Marijuana-Related Stops in Owensboro, KY by Gender",
+    
+# Label intended to show that the month is across all three years and therefore
+# not strictly linear
+  
+    subtitle = "By Month in 2015-17",
+    color = "Subject Gender",
+    caption = "Data from Stanford Open Policing Project"
+  )
+```
+
